@@ -1,0 +1,4 @@
+{"event_id":"ol_1_job_allowed","event":{"inputs":[{"namespace":"prod/snowflake","name":"sales/orders"}],"outputs":[],"job":{"namespace":"prod/airflow","name":"daily_etl"},"run":{"runId":"run_ignored"}}}
+{"event_id":"ol_2_denied","event":{"inputs":[{"namespace":"beta/snowflake","name":"sales/orders"}],"outputs":[{"namespace":"beta/snowflake","name":"sales/orders_enriched"}],"job":{"namespace":"beta/airflow","name":"nightly"},"run":{"runId":"run_beta_1"}}}
+{"event_id":"ol_3_job_allowed_via_normalize","event":{"inputs":[],"outputs":[],"job":{"namespace":"PROD/AIRFLOW","name":"DAILY_ETL"},"run":{"runId":"run_unknown"}}}
+{"event_id":"ol_4_facets_job_only","event":{"inputs":[],"outputs":[],"job":{},"run":{},"facets":{"job":{"namespace":"prod/airflow","name":"daily_etl"},"run":{"runId":"run_20260216"}}}}

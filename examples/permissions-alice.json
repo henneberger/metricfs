@@ -1,0 +1,9 @@
+{
+  "allow": [
+    {"object_type": "metric_row", "object_id": "orders_1", "permission": "read"},
+    {"object_type": "metric_row", "object_id": "orders_3", "permission": "read"},
+    {"object_type": "dataset", "object_id": "prod/snowflake/sales/orders", "permission": "read"},
+    {"object_type": "job", "object_id": "prod/airflow/daily_etl", "permission": "read"},
+    {"object_type": "run", "object_id": "run_20260216", "permission": "read"}
+  ]
+}

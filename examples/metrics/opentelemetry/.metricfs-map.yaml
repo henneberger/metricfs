@@ -1,0 +1,15 @@
+version: 1
+extends: "../.metricfs-map.yaml"
+rules:
+  - match:
+      glob: "*.jsonl"
+    object_type: "telemetry_item"
+    permission: "read"
+    mapper:
+      kind: "json_pointer"
+      pointer: "/otel_id"
+      canonical_template: "telemetry_item:{value}"
+      normalize:
+        lowercase: true
+        trim_slash: true
+    missing_resource_key: "deny"

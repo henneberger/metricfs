@@ -1,0 +1,14 @@
+{
+  "allow": [
+    {
+      "object_type": "telemetry_item",
+      "object_id": "checkout/cpu.utilization/host-a/2026-02-16t19:00:00z",
+      "permission": "read"
+    },
+    {
+      "object_type": "telemetry_item",
+      "object_id": "payments/error.rate/host-b/2026-02-16t19:00:00z",
+      "permission": "read"
+    }
+  ]
+}

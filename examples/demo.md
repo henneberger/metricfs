@@ -16,10 +16,15 @@ mkdir -p /mnt/metrics-alice
 ## 2. Start SpiceDB and load schema
 
 ```bash
-# Example only. Adjust for your environment.
-spicedb serve --grpc-preshared-key "$SPICEDB_TOKEN"
-zed schema write /Users/henneberger/libs/metricfs/examples/spicedb-schema.zed
-zed relationship import /Users/henneberger/libs/metricfs/examples/relationships.zed
+docker run -d --name metricfs-spicedb-test \
+  -p 50051:50051 -p 8443:8443 \
+  authzed/spicedb serve-testing --http-enabled
+
+docker run --rm -v "/Users/henneberger/libs/examples:/examples:ro" authzed/zed:latest \
+  schema write /examples/spicedb-schema.zed \
+  --endpoint host.docker.internal:50051 \
+  --token testtoken \
+  --insecure
 ```
 
 The sample relationships include namespace inheritance and a transitive chain
@@ -31,17 +36,39 @@ Transitive example included in the sample:
 - Alice can read `orders_1` and `orders_3` via this transitive path (without
   direct per-row grants).
 
+Load relationship tuples:
+
+```bash
+while IFS= read -r line; do
+  line="${line%$'\r'}"
+  [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
+  resource_part="${line%%@*}"; subject_part="${line#*@}"
+  resource="${resource_part%%#*}"; relation="${resource_part#*#}"
+  res_type="${resource%%:*}"; res_id="${resource#*:}"
+  subject_obj="${subject_part%%#*}"; subj_rel=""
+  [[ "$subject_part" == *"#"* ]] && subj_rel="${subject_part#*#}"
+  sub_type="${subject_obj%%:*}"; sub_id="${subject_obj#*:}"
+  payload=$(jq -nc --arg rt "$res_type" --arg rid "$res_id" --arg rel "$relation" --arg st "$sub_type" --arg sid "$sub_id" --arg srel "$subj_rel" \
+    '{updates:[{operation:"OPERATION_TOUCH",relationship:{resource:{objectType:$rt,objectId:$rid},relation:$rel,subject:{object:{objectType:$st,objectId:$sid}}}}]} | if $srel != "" then .updates[0].relationship.subject.optionalRelation = $srel else . end')
+  curl -sS -f -X POST 'http://127.0.0.1:8443/v1/relationships/write' \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Bearer testtoken' \
+    --data "$payload" >/dev/null
+done < /Users/henneberger/libs/examples/relationships.zed
+```
+
 ## 3. Mount filtered view for alice
 
 ```bash
 metricfs mount \
   --source-dir /data/metrics \
   --mount-dir /mnt/metrics-alice \
+  --auth-backend spicedb \
   --subject user:alice \
+  --spicedb-endpoint http://127.0.0.1:8443 \
+  --spicedb-token testtoken \
   --read-only \
   --allow-other=false \
-  --spicedb-endpoint 127.0.0.1:50051 \
-  --spicedb-token-env SPICEDB_TOKEN \
   --mapper-file-name .metricfs-map.yaml \
   --mapper-resolution nearest_ancestor \
   --mapper-inherit-parent \
@@ -98,25 +125,13 @@ Expected output after update:
 ## 6. OpenLineage mapping model
 
 For OpenLineage-style rows, place a directory mapper file at
-`/data/metrics/openlineage/.metricfs-map.yaml` that emits multiple canonical
-keys per event:
+`/data/metrics/openlineage/.metricfs-map.yaml` that emits a canonical job key
+per event:
 
-- All input datasets from `/event/inputs[*]`
-- All output datasets from `/event/outputs[*]`
 - Job object from `/event/job/{namespace,name}`
-- Run object from `/event/run/runId`
 
 The sample mapper uses `decision: any`, so the line is visible if the subject
-has `read` on at least one emitted object (dataset/job/run). It also includes
-fallback paths for job and run fields in facets when top-level fields are
-missing.
+has `read` on the emitted job object. It also includes fallback paths for job
+fields in facets when top-level fields are missing.
 
-Use namespace inheritance in SpiceDB to avoid per-dataset grants:
-
-```zed
-definition dataset {
-  relation viewer: user
-  relation parent_namespace: namespace
-  permission read = viewer + parent_namespace->read
-}
-```
+Use namespace inheritance in SpiceDB to avoid per-job grants.

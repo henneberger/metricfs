@@ -7,41 +7,18 @@ rules:
     mapper:
       kind: "multi_extract"
       emit:
-        - object_type: "dataset"
-          permission: "read"
-          from_array:
-            pointer: "/event/inputs"
-            fields:
-              namespace: "./namespace"
-              name: "./name"
-            canonical_template: "dataset:{namespace}/{name}"
-        - object_type: "dataset"
-          permission: "read"
-          from_array:
-            pointer: "/event/outputs"
-            fields:
-              namespace: "./namespace"
-              name: "./name"
-            canonical_template: "dataset:{namespace}/{name}"
         - object_type: "job"
           permission: "read"
           fields:
             namespace: "/event/job/namespace"
             name: "/event/job/name"
           canonical_template: "job:{namespace}/{name}"
-        - object_type: "run"
-          permission: "read"
-          fields:
-            run_id: "/event/run/runId"
-          canonical_template: "run:{run_id}"
       normalize:
         lowercase: true
         trim_slash: true
       fallback_paths:
-        job_namespace:
+        namespace:
           - "/event/facets/job/namespace"
-        job_name:
+        name:
           - "/event/facets/job/name"
-        run_id:
-          - "/event/facets/run/runId"
     missing_resource_key: "ignore"

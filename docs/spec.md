@@ -27,6 +27,15 @@ Required behavior:
 
 ## 4. Architecture
 
+Implementation note (current codebase):
+
+- `mount` uses kernel FUSE where the host supports it.
+- A non-FUSE path (`render`) exists for environments that cannot use FUSE.
+- Core filtering/index/auth semantics are implemented and tested.
+- Current `spicedb` backend performs cached `CheckPermission` calls per
+  candidate at read time; snapshot/watch reconciliation is planned but not part
+  of the current MVP implementation.
+
 ## 4.1 Components
 
 1. Mount layer (FUSE):
@@ -174,43 +183,20 @@ rules:
     mapper:
       kind: "multi_extract"
       emit:
-        - object_type: "dataset"
-          permission: "read"
-          from_array:
-            pointer: "/event/inputs"
-            fields:
-              namespace: "./namespace"
-              name: "./name"
-            canonical_template: "dataset:{namespace}/{name}"
-        - object_type: "dataset"
-          permission: "read"
-          from_array:
-            pointer: "/event/outputs"
-            fields:
-              namespace: "./namespace"
-              name: "./name"
-            canonical_template: "dataset:{namespace}/{name}"
         - object_type: "job"
           permission: "read"
           fields:
             namespace: "/event/job/namespace"
             name: "/event/job/name"
           canonical_template: "job:{namespace}/{name}"
-        - object_type: "run"
-          permission: "read"
-          fields:
-            run_id: "/event/run/runId"
-          canonical_template: "run:{run_id}"
       normalize:
         lowercase: true
         trim_slash: true
       fallback_paths:
-        job_namespace:
+        namespace:
           - "/event/facets/job/namespace"
-        job_name:
+        name:
           - "/event/facets/job/name"
-        run_id:
-          - "/event/facets/run/runId"
     missing_resource_key: "ignore"
 ```
 
@@ -218,7 +204,7 @@ rules:
 
 Transitive chain example (supported and expected):
 
-- `user:alice -> orb:data_eng -> org:acme -> namespace:acme -> dataset/job/run`
+- `user:alice -> orb:data_eng -> org:acme -> namespace:acme -> job`
 
 This chain is explicitly represented in:
 
@@ -229,6 +215,11 @@ MVP expectation:
 
 - Direct per-object grants are optional.
 - Transitive grants alone must be sufficient for visibility.
+
+Runtime auth backend note:
+
+- `spicedb` backend uses this model directly for live checks.
+- `file` backend is a local allow-list mode for development/testing.
 
 ## 7. Runtime CLI contract (no runtime YAML)
 
@@ -241,6 +232,7 @@ metricfs mount ...
 metricfs validate-flags ...
 metricfs warm-index --source-dir /data/metrics
 metricfs stats --mount /mnt/metrics-alice
+metricfs render --file /data/metrics/orders.jsonl ...
 ```
 
 ## 7.2 `mount` flags
@@ -249,11 +241,14 @@ metricfs stats --mount /mnt/metrics-alice
 |---|---|---|---|
 | `--source-dir` | yes | none | Must exist and be readable. |
 | `--mount-dir` | yes | none | Must exist; mountpoint path. |
-| `--subject` | yes | none | Subject string, e.g. `user:alice`. |
+| `--auth-backend` | no | `file` | `file` or `spicedb`. |
+| `--subject` | conditional | none | Required for `spicedb`; subject string, e.g. `user:alice`. |
 | `--read-only` | no | `true` | MVP must reject writable mode. |
 | `--allow-other` | no | `false` | Standard FUSE behavior. |
-| `--spicedb-endpoint` | yes | none | gRPC endpoint. |
-| `--spicedb-token` | no | none | Explicit token; overrides env. |
+| `--permissions-file` | conditional | none | Required for `file` unless `--allow-no-authz` is set. |
+| `--allow-no-authz` | no | `false` | File mode only; deny-all rows when no permissions file is provided. |
+| `--spicedb-endpoint` | conditional | none | Required for `spicedb`; HTTP endpoint (for example `http://127.0.0.1:8443`). |
+| `--spicedb-token` | conditional | none | Required for `spicedb` if env token is unset; overrides env. |
 | `--spicedb-token-env` | no | `SPICEDB_TOKEN` | Env var name used when token flag not provided. |
 | `--spicedb-consistency` | no | `minimize_latency` | SpiceDB consistency mode. |
 | `--watch-enabled` | no | `true` | Subscribe to SpiceDB watch stream. |
@@ -268,7 +263,7 @@ metricfs stats --mount /mnt/metrics-alice
 | `--mapper-file-name` | no | `.metricfs-map.yaml` | Directory mapper filename. |
 | `--mapper-resolution` | no | `nearest_ancestor` | MVP supports this value only. |
 | `--mapper-inherit-parent` | no | `true` | Enable `extends` behavior. |
-| `--missing-mapper` | no | `deny` | MVP supports `deny` only; other values are invalid. |
+| `--missing-mapper` | no | `deny` | `deny` or `passthrough`. |
 | `--missing-resource-key` | no | `deny` | Global default when rule omits value. |
 
 ## 7.3 CLI validation and exit codes
@@ -278,8 +273,7 @@ metricfs stats --mount /mnt/metrics-alice
   - `2` invalid flag values, missing required flags, or preflight path errors
 - `mount` startup returns:
   - `2` for argument/config validation errors
-  - `3` for dependency startup failures (for example SpiceDB unavailable when
-    `--on-spicedb-unavailable=fail_closed`)
+  - `3` for dependency startup failures (for example SpiceDB unavailable)
 
 ## 8. Security and failure behavior
 

@@ -1,0 +1,72 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          mkdir -p dist/assets
+
+          bin_name="metricfs"
+          ext=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            ext=".exe"
+          fi
+
+          out_dir="dist/metricfs_${version}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          mkdir -p "${out_dir}"
+
+          GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}" CGO_ENABLED=0 \
+            go build -o "${out_dir}/${bin_name}${ext}" ./cmd/metricfs
+
+          cp "${out_dir}/${bin_name}${ext}" "dist/assets/metricfs_${version}_${{ matrix.goos }}_${{ matrix.goarch }}${ext}"
+
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            (cd dist && zip -r "metricfs_${version}_${{ matrix.goos }}_${{ matrix.goarch }}.zip" "$(basename "${out_dir}")")
+          else
+            tar -C dist -czf "dist/metricfs_${version}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" "$(basename "${out_dir}")"
+          fi
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/assets/*
+            dist/*.tar.gz
+            dist/*.zip

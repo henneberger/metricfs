@@ -1,0 +1,69 @@
+services:
+  spicedb:
+    image: authzed/spicedb:latest
+    command:
+      - serve-testing
+      - --http-enabled
+      - --grpc-addr
+      - :50051
+      - --http-addr
+      - :8443
+    ports:
+      - "50051:50051"
+      - "8443:8443"
+
+  spicedb-seed:
+    image: authzed/zed:latest
+    depends_on:
+      - spicedb
+    volumes:
+      - ./examples:/workspace/examples:ro
+      - ./docker/seed-spicedb.sh:/seed-spicedb.sh:ro
+    environment:
+      SPICEDB_ENDPOINT: spicedb:50051
+      SPICEDB_TOKEN: testtoken
+    entrypoint: ["/seed-spicedb.sh"]
+
+  metricfs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: metricfs:fuse
+    depends_on:
+      spicedb-seed:
+        condition: service_completed_successfully
+    privileged: true
+    devices:
+      - /dev/fuse:/dev/fuse
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - ./examples:/workspace/examples:ro
+      - /tmp/metricfs-mnt:/mnt/metricfs
+    command:
+      - metricfs
+      - mount
+      - --source-dir
+      - /workspace/examples/metrics
+      - --mount-dir
+      - /mnt/metricfs
+      - --auth-backend
+      - spicedb
+      - --spicedb-endpoint
+      - http://spicedb:8443
+      - --spicedb-token
+      - testtoken
+      - --subject
+      - user:alice
+      - --read-only
+      - --mapper-file-name
+      - .metricfs-map.yaml
+      - --mapper-resolution
+      - nearest_ancestor
+      - --mapper-inherit-parent
+      - --missing-mapper
+      - deny
+      - --missing-resource-key
+      - deny
