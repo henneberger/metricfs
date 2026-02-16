@@ -9,25 +9,30 @@ Unauthorized rows are omitted, not redacted.
 
 ## Simple example
 
-Input JSONL:
+Input JSONL (`requests.jsonl`):
 
 ```json
-{"metric_row_id":"1","value":10}
-{"metric_row_id":"2","value":20}
-{"metric_row_id":"3","value":30}
+{"metric_row_id":"acme_checkout_requests","namespace":"acme","metric":"requests_total","value":1200}
+{"metric_row_id":"beta_checkout_requests","namespace":"beta","metric":"requests_total","value":980}
+{"metric_row_id":"acme_checkout_errors","namespace":"acme","metric":"errors_total","value":12}
 ```
 
-If the subject can read rows `1` and `3`, then:
+Simple transitive auth example:
+
+- `user:alice -> group:platform -> namespace:acme`
+- each `metric_row:*` in `namespace:acme` is readable via `parent_namespace`
+
+So Alice can read only the `acme` rows.
 
 ```bash
-cat /mnt/metrics/orders.jsonl
+cat /mnt/metrics/requests.jsonl
 ```
 
 returns:
 
 ```json
-{"metric_row_id":"1","value":10}
-{"metric_row_id":"3","value":30}
+{"metric_row_id":"acme_checkout_requests","namespace":"acme","metric":"requests_total","value":1200}
+{"metric_row_id":"acme_checkout_errors","namespace":"acme","metric":"errors_total","value":12}
 ```
 
 ## Why this exists
