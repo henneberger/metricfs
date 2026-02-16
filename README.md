@@ -60,6 +60,54 @@ returns:
   - Requires `--subject`, `--spicedb-endpoint`, and token
     (`--spicedb-token` or env via `--spicedb-token-env`).
 
+## File format support
+
+Current read/filter support:
+
+- `.jsonl`
+- `.jsonl.gz` (gzip-compressed JSONL)
+- `.jsonl.tar.gz` (tar+gzip archive containing one or more `.jsonl` members)
+
+Mounted virtual filename projection:
+
+- `orders.jsonl` -> `orders.jsonl`
+- `orders.jsonl.gz` -> `orders.jsonl`
+- `orders.jsonl.tar.gz` -> `orders.jsonl`
+
+Behavior notes:
+
+- For `*.jsonl.gz`, metricfs decompresses and filters line-by-line.
+- For `*.jsonl.tar.gz`, metricfs iterates `.jsonl` members in archive order and
+  filters each line.
+- Unauthorized rows are omitted exactly the same way as plain `.jsonl`.
+- Parquet is not included in this slice yet; it is planned next.
+
+Quick render examples:
+
+```bash
+./bin/metricfs render \
+  --auth-backend file \
+  --permissions-file /tmp/permissions.json \
+  --source-dir /data/metrics \
+  --file /data/metrics/orders.jsonl.gz \
+  --mapper-file-name .metricfs-map.yaml \
+  --mapper-resolution nearest_ancestor \
+  --mapper-inherit-parent \
+  --missing-mapper deny \
+  --missing-resource-key deny
+
+./bin/metricfs render \
+  --auth-backend file \
+  --permissions-file /tmp/permissions.json \
+  --source-dir /data/metrics \
+  --file /data/metrics/orders.jsonl.tar.gz \
+  --mapper-file-name .metricfs-map.yaml \
+  --mapper-resolution nearest_ancestor \
+  --mapper-inherit-parent \
+  --missing-mapper deny \
+  --missing-resource-key deny
+```
+
 ## Mapping model
 
 - Mapping and normalization live in `metricfs` (fast local transforms).

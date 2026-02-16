@@ -25,6 +25,38 @@ Required behavior:
 - SQL engine/query planner.
 - High-throughput scan optimization as a primary objective.
 
+## 3.1 Compressed JSONL MVP extension
+
+This MVP extension adds compressed-on-disk support while preserving normal
+JSONL semantics at read time.
+
+Supported source formats:
+
+- `*.jsonl`
+- `*.jsonl.gz`
+- `*.jsonl.tar.gz`
+
+Virtual mount projection:
+
+- `foo.jsonl` appears as `foo.jsonl`
+- `foo.jsonl.gz` appears as `foo.jsonl`
+- `foo.jsonl.tar.gz` appears as `foo.jsonl`
+
+Read semantics:
+
+- `jsonl.gz`: stream gzip decompression, evaluate/filter each line.
+- `jsonl.tar.gz`: stream tar members; process members ending in `.jsonl` in
+  archive order, evaluating/filtering each line.
+- Filtering behavior (`decision`, candidates, deny-by-default) matches plain
+  JSONL behavior.
+
+Limitations in this slice:
+
+- No random-access index acceleration for compressed formats yet.
+- Virtual-name collisions in a directory resolve in favor of existing
+  non-projected names.
+- Parquet support is intentionally deferred to the next phase.
+
 ## 4. Architecture
 
 Implementation note (current codebase):

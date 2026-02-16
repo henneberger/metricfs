@@ -8,13 +8,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/henneberger/metrics-fs/internal/auth"
-	"github.com/henneberger/metrics-fs/internal/indexer"
+	"github.com/henneberger/metrics-fs/internal/projector"
 )
 
 type Config struct {
@@ -77,17 +78,27 @@ type dirNode struct {
 	sourcePath string
 }
 
+type resolvedEntry struct {
+	name      string
+	source    string
+	isDir     bool
+	projected bool
+}
+
 func (d *dirNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	next := filepath.Join(d.sourcePath, name)
-	st, err := os.Stat(next)
+	entries, err := d.resolveEntries()
 	if err != nil {
+		return nil, syscall.EIO
+	}
+	ent, ok := entries[name]
+	if !ok {
 		return nil, syscall.ENOENT
 	}
-	if st.IsDir() {
-		ch := &dirNode{cfg: d.cfg, az: d.az, sourcePath: next}
+	if ent.isDir {
+		ch := &dirNode{cfg: d.cfg, az: d.az, sourcePath: ent.source}
 		return d.NewInode(ctx, ch, fs.StableAttr{Mode: syscall.S_IFDIR}), 0
 	}
-	data, err := d.fileData(next)
+	data, err := d.fileData(ent)
 	if err != nil {
 		return nil, syscall.EIO
 	}
@@ -104,18 +115,25 @@ func (d *dirNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (
 }
 
 func (d *dirNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
-	entries, err := os.ReadDir(d.sourcePath)
+	entries, err := d.resolveEntries()
 	if err != nil {
 		return nil, syscall.EIO
 	}
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
 	out := make([]fuse.DirEntry, 0, len(entries))
-	for _, e := range entries {
+	for _, name := range names {
+		e := entries[name]
 		mode := uint32(syscall.S_IFREG)
-		if e.IsDir() {
+		if e.isDir {
 			mode = syscall.S_IFDIR
 		}
 		out = append(out, fuse.DirEntry{
-			Name: e.Name(),
+			Name: e.name,
 			Mode: mode,
 		})
 	}
@@ -131,11 +149,13 @@ func (d *dirNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOu
 	return 0
 }
 
-func (d *dirNode) fileData(path string) ([]byte, error) {
-	if !strings.HasSuffix(strings.ToLower(path), ".jsonl") {
-		return os.ReadFile(path)
+func (d *dirNode) fileData(ent resolvedEntry) ([]byte, error) {
+	lower := strings.ToLower(ent.source)
+	if !ent.projected && !strings.HasSuffix(lower, ".jsonl") {
+		return os.ReadFile(ent.source)
 	}
-	fi, err := indexer.BuildOrLoad(path, indexer.Options{
+	var b bytes.Buffer
+	if err := projector.RenderFiltered(ent.source, projector.Options{
 		SourceDir:         d.cfg.SourceDir,
 		MapperFileName:    d.cfg.MapperFileName,
 		MapperInherit:     d.cfg.MapperInherit,
@@ -143,15 +163,40 @@ func (d *dirNode) fileData(path string) ([]byte, error) {
 		MissingResource:   d.cfg.MissingResource,
 		IndexDir:          d.cfg.IndexDir,
 		FormatVersion:     d.cfg.IndexFormatVersion,
-	})
-	if err != nil {
-		return nil, err
-	}
-	var b bytes.Buffer
-	if err := indexer.FilterToWriter(fi, d.az, &b); err != nil {
+	}, d.az, &b); err != nil {
 		return nil, err
 	}
 	return b.Bytes(), nil
+}
+
+func (d *dirNode) resolveEntries() (map[string]resolvedEntry, error) {
+	dirEntries, err := os.ReadDir(d.sourcePath)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]resolvedEntry{}
+	for _, e := range dirEntries {
+		source := filepath.Join(d.sourcePath, e.Name())
+		if e.IsDir() {
+			out[e.Name()] = resolvedEntry{
+				name:   e.Name(),
+				source: source,
+				isDir:  true,
+			}
+			continue
+		}
+		vname, projected := projector.VirtualJSONLName(e.Name())
+		if existing, ok := out[vname]; ok && !existing.projected {
+			continue
+		}
+		out[vname] = resolvedEntry{
+			name:      vname,
+			source:    source,
+			isDir:     false,
+			projected: projected,
+		}
+	}
+	return out, nil
 }
 
 type memFileNode struct {

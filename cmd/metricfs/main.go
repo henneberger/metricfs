@@ -16,6 +16,7 @@ import (
 	"github.com/henneberger/metrics-fs/internal/auth"
 	"github.com/henneberger/metrics-fs/internal/fusefs"
 	"github.com/henneberger/metrics-fs/internal/indexer"
+	"github.com/henneberger/metrics-fs/internal/projector"
 )
 
 type commonFlags struct {
@@ -322,7 +323,7 @@ func runRender(args []string) error {
 	if cl, ok := az.(io.Closer); ok {
 		defer func() { _ = cl.Close() }()
 	}
-	fi, err := indexer.BuildOrLoad(*filePath, indexer.Options{
+	return projector.RenderFiltered(*filePath, projector.Options{
 		SourceDir:         c.sourceDir,
 		MapperFileName:    c.mapperFileName,
 		MapperInherit:     c.mapperInheritParent,
@@ -330,11 +331,7 @@ func runRender(args []string) error {
 		MissingResource:   c.missingResourceKey,
 		IndexDir:          c.indexDir,
 		FormatVersion:     c.indexFormatVersion,
-	})
-	if err != nil {
-		return err
-	}
-	return indexer.FilterToWriter(fi, az, os.Stdout)
+	}, az, os.Stdout)
 }
 
 func newAuthorizer(c commonFlags) (auth.Authorizer, error) {
