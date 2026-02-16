@@ -1,0 +1,17 @@
+orb:data_eng#member@user:alice
+org:acme#member@orb:data_eng
+namespace:acme#viewer_org@org:acme
+
+metric_row:orders_1#parent_namespace@namespace:acme
+metric_row:orders_2#parent_namespace@namespace:beta
+metric_row:orders_3#parent_namespace@namespace:acme
+metric_row:orders_4#parent_namespace@namespace:delta
+metric_row:orders_5#parent_namespace@namespace:beta
+namespace:beta#viewer_user@user:bob
+
+metric_row:orders_2#viewer@user:bob
+metric_row:orders_5#viewer@user:bob
+
+dataset:prod/snowflake/sales/orders#parent_namespace@namespace:acme
+job:prod/airflow/daily_etl#parent_namespace@namespace:acme
+run:run_20260216#parent_job@job:prod/airflow/daily_etl

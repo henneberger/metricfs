@@ -1,0 +1,42 @@
+definition user {}
+
+definition orb {
+  relation member: user
+  permission read = member
+}
+
+definition org {
+  relation member: orb
+  permission read = member + member->read
+}
+
+definition namespace {
+  relation viewer_user: user
+  relation viewer_orb: orb
+  relation viewer_org: org
+  permission read = viewer_user + viewer_orb->read + viewer_org->read
+}
+
+definition dataset {
+  relation viewer: user
+  relation parent_namespace: namespace
+  permission read = viewer + parent_namespace->read
+}
+
+definition metric_row {
+  relation viewer: user
+  relation parent_namespace: namespace
+  permission read = viewer + parent_namespace->read
+}
+
+definition job {
+  relation viewer: user
+  relation parent_namespace: namespace
+  permission read = viewer + parent_namespace->read
+}
+
+definition run {
+  relation viewer: user
+  relation parent_job: job
+  permission read = viewer + parent_job->read
+}

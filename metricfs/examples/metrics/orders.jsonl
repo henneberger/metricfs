@@ -1,0 +1,5 @@
+{"metric_row_id":"orders_1","tenant":"acme","metric":"latency_ms","value":112}
+{"metric_row_id":"orders_2","tenant":"beta","metric":"latency_ms","value":97}
+{"metric_row_id":"orders_3","tenant":"acme","metric":"error_rate","value":0.021}
+{"metric_row_id":"orders_4","tenant":"delta","metric":"latency_ms","value":143}
+{"metric_row_id":"orders_5","tenant":"beta","metric":"error_rate","value":0.034}

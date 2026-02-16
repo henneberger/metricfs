@@ -1,0 +1,11 @@
+version: 1
+rules:
+  - match:
+      glob: "*.jsonl"
+    object_type: "metric_row"
+    permission: "read"
+    mapper:
+      kind: "json_pointer"
+      pointer: "/metric_row_id"
+      canonical_template: "metric_row:{value}"
+    missing_resource_key: "deny"
